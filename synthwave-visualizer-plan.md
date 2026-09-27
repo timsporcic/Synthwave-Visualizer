@@ -2,7 +2,7 @@
 
 A native macOS app (Swift, Metal) that taps Spotify's audio with a Core Audio process tap and renders a fullscreen retrowave scene: gradient sunset, retro sun with cut lines, scrolling perspective grid, and 32 neon equalizer bars (16 analyzer bands, mirrored) driven by a live FFT.
 
-Target: macOS 27, Xcode current, Swift 6. No third-party dependencies.
+Target: macOS 26 or later (see Implementation notes), Xcode current, Swift 6. No third-party dependencies.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ IOProc (realtime thread)
 | `DSP/SpectrumAnalyzer.swift` | Hann window, vDSP FFT, log-spaced band buckets, attack/decay smoothing, peak hold, beat flag |
 | `DSP/FrameFeatures.swift` | Plain struct the renderer consumes |
 | `Render/SynthwaveRenderer.swift` | MTKViewDelegate, render passes, uniforms |
-| `Render/Shaders.metal` | Sky, sun, grid, bars, bloom, post |
+| `Render/Shaders.swift` | Sky, sun, grid, bars, bloom, post (MSL source compiled at runtime; see Implementation notes) |
 | `App/` | SwiftUI window, fullscreen, process picker menu, permission handling |
 
 ## Phases
@@ -35,7 +35,7 @@ Build in this order. Each phase ends on a checkable state; do not start the next
 
 The Xcode template ships as a multiplatform, sandboxed, Swift 5 target. Steps 1 to 4 bring it in line with this plan.
 
-1. Restrict the target to macOS with a macOS 27 deployment target (the template also targets iOS and visionOS). SwiftUI lifecycle, Swift 6 language mode with strict concurrency (the template has `SWIFT_VERSION = 5.0`).
+1. Restrict the target to macOS with a macOS 26.0 deployment target (the template also targets iOS and visionOS). SwiftUI lifecycle, Swift 6 language mode with strict concurrency (the template has `SWIFT_VERSION = 5.0`).
 2. Add `NSAudioCaptureUsageDescription` with a one-line reason. Process taps go through the "System Audio Recording" privacy prompt; without this key the create call fails. The target generates its Info.plist (`GENERATE_INFOPLIST_FILE = YES`), so add it as an `INFOPLIST_KEY_NSAudioCaptureUsageDescription` build setting; if Xcode does not pass that key through, point `INFOPLIST_FILE` at a partial Info.plist holding just this key, which Xcode merges with the generated one.
 3. Turn App Sandbox off (the template has `ENABLE_APP_SANDBOX = YES`). If it is turned on later, add the `com.apple.security.device.audio-input` entitlement and re-verify taps work.
 4. The target sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so every type is main-actor isolated unless declared otherwise. Declare `RingBuffer` and `ProcessTap` `nonisolated`. Swift 6 infers a closure formed in a main-actor context as main-actor isolated and inserts a runtime executor check, so an IOProc closure created inside a main-actor `ProcessTap` traps on its first callback from Core Audio's IO thread.
@@ -51,7 +51,7 @@ Done when: the app launches and shows a dark purple window.
 3. Register an `AudioObjectAddPropertyListenerBlock` on the process list, passing `DispatchQueue.main` as the queue so the block runs where the main-actor default expects it. When it fires, re-run the match and publish the new ID (or nil) through an `AsyncStream`.
 4. Also expose the full list of `(bundleID, pid, objectID, isRunningOutput)` for the picker menu, so the same app can tap a browser playing Lofi Girl. Browsers play audio from helper processes (Chrome's `.helper` processes, Safari's WebKit GPU process), so the list shows helper bundle IDs, not app names. Sort entries with `kAudioProcessPropertyIsRunningOutput` set to the top so the process currently playing is easy to find.
 
-First, record when Spotify's process object appears in the list: at launch, or only once Spotify starts playing. The check below depends on it.
+Recorded: Spotify's process object appears about 1.3 s after launch, before anything plays.
 
 Done when: launching Spotify, quitting it, and relaunching it (pressing play after each launch if the object only appears on playback) logs three process-ID changes.
 
@@ -180,7 +180,7 @@ Run analysis inside the `MTKView` draw callback so audio and rendering share one
 5. Bucket into 16 log-spaced bands from 40 Hz to 16 kHz (each band about 1.455 times the width of the one below). Precompute the bin ranges once per sample rate (read `format.mSampleRate`, it is usually 44100 for Spotify). At 44.1 kHz the bins are 10.8 Hz wide and the narrowest band (40 to 58 Hz) spans about 1.7 bins; clamp every band to at least one bin anyway, so a sample-rate change cannot produce an empty band. Band value is the max normalized level in its range.
 6. Smooth each band with asymmetric easing: attack `k60 = 0.7`, decay `k60 = 0.12`. Keep a separate peak-hold per band that holds for 0.2 s, then falls at 1.8 per second.
 7. Derive scalars: `bass` = mean of bands covering 40 to 120 Hz, `mids` = mean of 200 Hz to 2 kHz, `rms` from the raw mono window.
-8. Beat flag, computed on linear energy (a ratio on dB-normalized values fires on noise when quiet and misses kicks when loud). `bassEnergy` = sum of squared scaled magnitudes over the FFT bins from 40 to 120 Hz, taken before dB conversion and smoothing. A beat fires when `bassEnergy` exceeds 1.4 times its running average over the last second (exponential average, `alpha = 1 - exp(-dt / 1.0)`), `bassEnergy` is above an absolute floor equivalent to -50 dBFS, and at least 130 ms have passed since the last beat. The floor keeps silence and background noise from firing; tune it with the click track.
+8. Beat flag, computed on linear energy (a ratio on dB-normalized values fires on noise when quiet and misses kicks when loud). `bassEnergy` = sum of squared scaled magnitudes over the FFT bins from 40 to 120 Hz, taken before dB conversion and smoothing. A beat fires when `bassEnergy` exceeds 1.4 times its running average over the last second (exponential average, `alpha = 1 - exp(-dt / 1.0)`), `bassEnergy` is above an absolute floor equivalent to -50 dBFS, at least 130 ms have passed since the last beat, and energy has dropped back below the threshold since that beat (without this re-arm rule, a sustained bass note re-fires every 130 ms for about a second while the slow average catches up). The floor keeps silence and background noise from firing; tune it with the click track.
 9. Publish everything as one `FrameFeatures` value.
 
 Done when: a temporary bar-graph overlay drawn with plain rectangles tracks the music, bars fall smoothly on pause, the beat flag fires on kick drums in a synthwave test track and stays off during silence, and bar fall speed looks the same with `preferredFramesPerSecond` forced to 30 and to 60.
@@ -251,3 +251,19 @@ Grid and bars use cyan and magenta only. Orange and sun highlight belong to the 
 - Teardown order is stop, destroy IOProc, destroy aggregate, destroy tap. The aggregate is private, so it never appears in Audio MIDI Setup and cannot outlive the process; the risk is leaks piling up inside a long session, one per Spotify relaunch. The Phase 3 device-count check covers it.
 - First launch triggers the System Audio Recording prompt. If the user denies it, only System Settings can fix it. Whether a denial makes `AudioHardwareCreateProcessTap` fail or yields a silent tap is unverified; Phase 3 records which.
 - `MTKView` draw callback and analysis share a thread. Keep analysis under 1 ms (a 4096-point vDSP FFT takes tens of microseconds on Apple silicon; the band bucketing loop is the part to watch).
+
+## Implementation notes
+
+Findings and departures from the phases above, recorded during implementation.
+
+- **Deployment target 26.0, not 27.** The development Mac runs macOS 26.6, and a 27 target will not launch there. The tap APIs need 14.2 and `Atomic` needs 15.0.
+- **Shaders compile at runtime.** The Metal Toolchain is a separate Xcode download (`xcodebuild -downloadComponent MetalToolchain`) and isn't installed, so the MSL source lives in `Render/Shaders.swift` and goes through `makeLibrary(source:)`. `SceneRendererTests` compiles it, so a shader error still fails the tests. Once the toolchain is installed, moving it to `Shaders.metal` is mechanical.
+- **`NSAudioCaptureUsageDescription` needs the partial Info.plist.** Xcode drops it when it's set as an `INFOPLIST_KEY_` build setting, so it lives in `Config/Info.plist`.
+- **Taps are by bundle ID, not a single process.** `ProcessLocator.watch(bundleID:)` yields every process object for the bundle, and `ProcessTap.start(processes:)` mixes them all down. Browsers play from several helper processes.
+- **`ProcessTap.validate` also rejects anything that isn't stereo Float32**, since the IOProc and analyzer assume it.
+- **`RingBuffer.readLatest` detects laps.** The writer publishes the end of each write before copying; if the reader was preempted long enough for the writer to overwrite its slots mid-copy, it copies again (up to 8 times). The concurrency test caught a torn window under parallel test load without this.
+- **Grid lines fade by on-screen density.** Where horizontal lines are closer together than a few pixels, they piled up into a solid cyan band below the horizon.
+- **The Phase 3 RMS label and Phase 4 bar graph were kept** as Debug > Show Analyzer Overlay (⌘D), off by default. The Phase 3 device-count check is Debug > Run Tap Leak Check.
+- **The track title overlay is off by default** (View > Show Track Title, ⌘T), because its first read raises the Automation permission prompt.
+- **Not yet observed:** the "Done when" checks that need System Audio Recording permission and real music (Phase 3 RMS, leak check, and permission-denial behavior; Phase 4 overlay against a real track; Phase 5 live frame rate; Phase 6's one-hour run).
+
