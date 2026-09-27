@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged with the generated Info.plist. Xcode does not pass this key through as an INFOPLIST_KEY_ build setting. -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Listens to the audio of the app you pick so the visualizer can react to the music.</string>
+</dict>
+</plist>
