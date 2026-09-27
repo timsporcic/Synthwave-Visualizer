@@ -60,15 +60,19 @@ final class SynthwaveRenderer: NSObject, MTKViewDelegate {
     }
 }
 
-/// Runs at the display's refresh rate (MTKView defaults to 60) and follows the window to other
-/// screens.
+/// Runs at the display's refresh rate (MTKView defaults to 60), follows the window to other
+/// screens, and hides the cursor after two idle seconds.
 final class SynthwaveMTKView: MTKView {
     private var screenObserver: NSObjectProtocol?
+    private var cursorTimer: Timer?
+    private var idleCursor = IdleCursor()
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        cursorTimer?.invalidate()
+        cursorTimer = nil
         guard let window else { return }
         matchRefreshRate()
         screenObserver = NotificationCenter.default.addObserver(
@@ -76,9 +80,19 @@ final class SynthwaveMTKView: MTKView {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.matchRefreshRate() }
         }
+        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hideIdleCursor() }
+        }
     }
 
     private func matchRefreshRate() {
         preferredFramesPerSecond = window?.screen?.maximumFramesPerSecond ?? 60
+    }
+
+    private func hideIdleCursor() {
+        let mouse = NSEvent.mouseLocation
+        guard idleCursor.shouldHide(mouseAt: mouse, now: CACurrentMediaTime()),
+              let window, window.isKeyWindow, window.frame.contains(mouse) else { return }
+        NSCursor.setHiddenUntilMouseMoves(true)
     }
 }

@@ -7,7 +7,7 @@ import Observation
 /// processes come and go (a Spotify relaunch changes its process object ID).
 @Observable
 final class AudioController {
-    enum Target: Hashable {
+    nonisolated enum Target: Hashable {
         case app(bundleID: String)
         case systemAudio
 
@@ -25,15 +25,21 @@ final class AudioController {
     static let analysisWindow = 8192
 
     private(set) var target: Target = .spotify
-    private(set) var status: Status = .idle
+    private(set) var status: Status = .idle {
+        didSet { status == .running ? displaySleep.hold() : displaySleep.release() }
+    }
     /// Picker entries, refreshed once per second so the playing source sorts first.
     private(set) var sources: [AudioSource] = []
     private(set) var permissionDenied = false
+    /// Set when the user closes the permission sheet, so detection does not reopen it every
+    /// few seconds. Cleared whenever a source is (re)selected.
+    var permissionSheetDismissed = false
     /// Result of the last Debug > Run Tap Leak Check, shown in an alert.
     var leakCheckResult: String?
 
     @ObservationIgnored let ring = RingBuffer(capacity: 16384)
     @ObservationIgnored private let tap: ProcessTap
+    @ObservationIgnored private let displaySleep = DisplaySleepAssertion()
     @ObservationIgnored private let locator: ProcessLocator
     @ObservationIgnored private var watchTask: Task<Void, Never>?
     @ObservationIgnored private var monitor: Timer?
@@ -59,6 +65,7 @@ final class AudioController {
 
     func select(_ newTarget: Target) {
         target = newTarget
+        permissionSheetDismissed = false
         watchTask?.cancel()
         watchTask = nil
         stopTap()
