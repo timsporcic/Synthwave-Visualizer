@@ -8,7 +8,7 @@ struct VisualizerView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> MTKView {
-        let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
+        let view = SynthwaveMTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
         view.colorPixelFormat = .bgra8Unorm
         context.coordinator.renderer = SynthwaveRenderer(view: view, audio: audio, hud: hud)
         return view
