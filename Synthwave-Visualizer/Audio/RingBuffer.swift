@@ -28,6 +28,9 @@ nonisolated final class RingBuffer: @unchecked Sendable {
 
     deinit { storage.deallocate() }
 
+    /// Total samples ever written. Stops advancing when the tap stops or stalls.
+    var writeCount: Int { writeIndex.load(ordering: .acquiring) }
+
     func write(_ samples: UnsafePointer<Float>, count: Int) {
         guard count > 0 else { return }
         // Only the last `capacity` samples of an oversized write can survive.

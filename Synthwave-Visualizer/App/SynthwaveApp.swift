@@ -2,12 +2,13 @@ import AppKit
 import SwiftUI
 
 @main struct SynthwaveApp: App {
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var audio = AudioController()
     @State private var hud = DebugHUD()
     @State private var track = TrackTitleModel()
 
     var body: some Scene {
-        WindowGroup {
+        Window("Synthwave", id: "visualizer") {
             ContentView(audio: audio, hud: hud, track: track)
                 .task {
                     // Unit tests run inside this app; starting the tap there would raise the
@@ -42,6 +43,11 @@ import SwiftUI
 
     nonisolated static var isHostingTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    final class AppDelegate: NSObject, NSApplicationDelegate {
+        // The tap and the display-sleep assertion belong to the window; closing it ends both.
+        func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     }
 
     private static func appName(bundleID: String) -> String {

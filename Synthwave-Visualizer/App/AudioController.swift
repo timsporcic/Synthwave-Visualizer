@@ -46,6 +46,7 @@ final class AudioController {
     @ObservationIgnored private var probe = PermissionProbe()
     @ObservationIgnored private var tappedProcesses: [AudioObjectID] = []
     @ObservationIgnored private var scratch = [Float](repeating: 0, count: analysisWindow)
+    @ObservationIgnored private var lastTickWriteCount = 0
 
     init(locator: ProcessLocator = .live()) {
         self.locator = locator
@@ -55,7 +56,9 @@ final class AudioController {
     /// The tap's sample rate, or 44.1 kHz until a tap has started.
     var sampleRate: Double { tap.format.mSampleRate > 0 ? tap.format.mSampleRate : 44100 }
 
+    /// Safe to call more than once (the window's task reruns if the window is recreated).
     func start() {
+        guard monitor == nil else { return }
         select(target)
         monitor = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -146,16 +149,22 @@ final class AudioController {
     private func tick() {
         let processes = locator.processes
         sources = processes.sources(excluding: Bundle.main.bundleIdentifier)
+        let writeCount = ring.writeCount
+        let delivering = writeCount != lastTickWriteCount
+        lastTickWriteCount = writeCount
         guard status == .running else { return }
         let silent = scratch.withUnsafeMutableBufferPointer { buffer in
             ring.readLatest(into: buffer.baseAddress!, count: buffer.count)
             return vDSP.maximumMagnitude(buffer) == 0
         }
+        // System Audio skips the silence heuristic: many apps hold an output stream open while
+        // rendering silence, so "something is playing" proves nothing there. Denial still
+        // surfaces as a `.create` failure.
         let playing = switch target {
-        case .systemAudio: processes.contains(where: \.isRunningOutput)
+        case .systemAudio: false
         case .app: processes.contains { tappedProcesses.contains($0.objectID) && $0.isRunningOutput }
         }
-        if probe.record(exactSilence: silent, targetPlaying: playing) {
+        if probe.record(exactSilence: silent, targetPlaying: playing, delivering: delivering) {
             permissionDenied = true
         } else if !silent {
             permissionDenied = false

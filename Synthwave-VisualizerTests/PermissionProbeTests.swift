@@ -4,22 +4,22 @@ import Testing
 struct PermissionProbeTests {
     @Test func threeSilentSecondsWhileTheTargetPlaysMeansDenied() {
         var probe = PermissionProbe()
-        let results = (0..<3).map { _ in probe.record(exactSilence: true, targetPlaying: true) }
+        let results = (0..<3).map { _ in probe.record(exactSilence: true, targetPlaying: true, delivering: true) }
         #expect(results == [false, false, true])
     }
 
     @Test func silenceWhileTheTargetIsPausedIsNotDenial() {
         var probe = PermissionProbe()
-        let results = (0..<10).map { _ in probe.record(exactSilence: true, targetPlaying: false) }
+        let results = (0..<10).map { _ in probe.record(exactSilence: true, targetPlaying: false, delivering: true) }
         #expect(!results.contains(true))
     }
 
     @Test func realAudioResetsTheCount() {
         var probe = PermissionProbe()
-        _ = probe.record(exactSilence: true, targetPlaying: true)
-        _ = probe.record(exactSilence: true, targetPlaying: true)
-        _ = probe.record(exactSilence: false, targetPlaying: true)
-        let afterReset = probe.record(exactSilence: true, targetPlaying: true)
+        _ = probe.record(exactSilence: true, targetPlaying: true, delivering: true)
+        _ = probe.record(exactSilence: true, targetPlaying: true, delivering: true)
+        _ = probe.record(exactSilence: false, targetPlaying: true, delivering: true)
+        let afterReset = probe.record(exactSilence: true, targetPlaying: true, delivering: true)
         #expect(!afterReset)
     }
 

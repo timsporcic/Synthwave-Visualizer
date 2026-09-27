@@ -10,6 +10,7 @@ final class SynthwaveRenderer: NSObject, MTKViewDelegate {
     private let analyzer: SpectrumAnalyzer
     private var state = SceneState()
     private var window = [Float](repeating: 0, count: AudioController.analysisWindow)
+    private var staleAudio = StaleAudio()
     private var lastFrameTime: CFTimeInterval?
 
     init?(view: MTKView, audio: AudioController, hud: DebugHUD) {
@@ -38,7 +39,7 @@ final class SynthwaveRenderer: NSObject, MTKViewDelegate {
         lastFrameTime = now
 
         // Analysis runs here, on the render clock, so audio and picture share one timeline.
-        let features = analyzeLatest(dt: dt)
+        let features = analyzeLatest(dt: dt, now: now)
         if hud.isVisible { hud.features = features }
         state.advance(features, dt: dt)
 
@@ -51,10 +52,16 @@ final class SynthwaveRenderer: NSObject, MTKViewDelegate {
         buffer.commit()
     }
 
-    private func analyzeLatest(dt: Double) -> FrameFeatures {
+    private func analyzeLatest(dt: Double, now: Double) -> FrameFeatures {
         analyzer.setSampleRate(audio.sampleRate)
+        let stale = staleAudio.isStale(writeCount: audio.ring.writeCount, now: now)
         return window.withUnsafeMutableBufferPointer { buffer in
-            audio.ring.readLatest(into: buffer.baseAddress!, count: buffer.count)
+            // With no new samples, re-analyzing the last window would freeze the scene.
+            if stale {
+                buffer.update(repeating: 0)
+            } else {
+                audio.ring.readLatest(into: buffer.baseAddress!, count: buffer.count)
+            }
             return analyzer.analyze(interleaved: buffer.baseAddress!, dt: dt)
         }
     }

@@ -33,4 +33,4 @@ Pure logic lives in small value types with tests (`PermissionProbe`, `IdleCursor
 - Shaders are a Swift string (`Render/Shaders.swift`) compiled at runtime with `makeLibrary(source:)`, because the Metal Toolchain isn't installed here. A shader error only shows up at runtime, so run `SceneRendererTests` after any shader edit. `SceneUniforms` in Swift and MSL must keep the same field order.
 - The `Synthwave-Visualizer/` and `Synthwave-VisualizerTests/` folders are file-system synchronized groups: new files join their target with no `project.pbxproj` edit.
 - `NSAudioCaptureUsageDescription` lives in `Config/Info.plist`, merged into the generated Info.plist. Xcode drops it when it's set as an `INFOPLIST_KEY_` build setting. Keep the file outside the synchronized folder, or it gets copied as a resource.
-- Deployment target is macOS 26.0 (the development Mac runs 26.x), not the plan's 27.
+- Deployment target is macOS 26.0: the development Mac runs 26.x, and a 27 target would not launch there.
