@@ -19,6 +19,7 @@ xcodebuild -project Synthwave-Visualizer.xcodeproj -scheme Synthwave-Visualizer 
 - Tests use Swift Testing and run hosted inside the app. The app skips `audio.start()` when `XCTestConfigurationFilePath` is set, so tests never raise the System Audio Recording prompt.
 - The test host's stdout does not reach xcodebuild's output. Put diagnostics in the `#expect` message and read failures from the `.xcresult` (`xcrun xcresulttool get test-results tests --path <bundle>`).
 - `SceneRendererTests` renders silence/pad/kick frames offscreen. Pass `TEST_RUNNER_SYNTHWAVE_SNAPSHOT_DIR=<dir>` to xcodebuild to also write them as PNGs for a visual check.
+- `scripts/release.sh` archives, exports with Developer ID, notarizes, and staples into `build/Release/`. It needs the team's Developer ID Application certificate and the `synthwave-notary` notarytool keychain profile. The hardened runtime is on, so new Apple Events or device access needs a matching key in `Config/Synthwave-Visualizer.entitlements`.
 - Tap, permission, and live-audio behavior can't be unit tested (they need the permission grant). Debug > Run Tap Leak Check and Debug > Show Analyzer Overlay (⌘D) exist for checking them by hand.
 
 ## Architecture

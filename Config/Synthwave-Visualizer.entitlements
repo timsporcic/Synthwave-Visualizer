@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened runtime blocks Apple Events without this; TrackInfo asks Spotify for the current track. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<!-- Hardened runtime gates audio capture behind this; the process tap reads other apps' output. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
