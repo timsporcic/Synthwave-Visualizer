@@ -15,7 +15,11 @@ It is written in Swift 6 with SwiftUI and Metal, and has no third-party dependen
 - 32 equalizer bars, which are 16 frequency bands mirrored around the sun, each with a peak cap that hangs for a moment before it falls.
 - Bloom, chromatic aberration, scanlines, a vignette, and film noise on top.
 
-## Requirements
+## Download
+
+Download `Synthwave-Visualizer.zip` from the [latest release](https://github.com/timsporcic/Synthwave-Visualizer/releases/latest), unzip it, and move `Synthwave-Visualizer.app` to Applications. It needs macOS 26.0 or later, runs on Apple Silicon and Intel, and is signed with Developer ID and notarized, so it opens without a Gatekeeper warning.
+
+## Requirements for building
 
 - macOS 26.0 or later
 - Xcode with Swift 6
@@ -29,8 +33,6 @@ xcodebuild -project Synthwave-Visualizer.xcodeproj -scheme Synthwave-Visualizer 
 ```
 
 On first launch macOS asks for System Audio Recording permission. The tap delivers only silence without it. If you deny the prompt, the app shows a sheet with a button that opens the right pane in System Settings > Privacy & Security.
-
-Debug builds are ad-hoc signed, so macOS may ask again after a rebuild.
 
 ## Using it
 
